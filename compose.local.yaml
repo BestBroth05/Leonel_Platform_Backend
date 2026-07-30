@@ -1,0 +1,85 @@
+name: leonel-platform-local
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: leonel-platform-postgres
+    environment:
+      POSTGRES_DB: leonel_platform
+      POSTGRES_USER: leonel_platform
+      POSTGRES_PASSWORD: leonel_platform_local
+    ports:
+      - "5432:5432"
+    volumes:
+      - leonel-platform-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U leonel_platform -d leonel_platform"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - leonel-platform-local
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: leonel-platform-api
+    environment:
+      LEONEL_PLATFORM_ENV: local
+      LEONEL_PLATFORM_LOG_LEVEL: info
+      NODE_ENV: development
+      API_PORT: 3000
+      DATABASE_URL: postgresql://leonel_platform:leonel_platform_local@postgres:5432/leonel_platform
+      JWT_ACCESS_SECRET: local-dev-access-secret-change-me
+      JWT_ACCESS_TTL_SECONDS: "900"
+      JWT_REFRESH_TTL_DAYS: "7"
+      ADMIN_EMAIL: admin@leonel-platform.local
+      ADMIN_PASSWORD: ChangeMeLocalOnly!
+      ADMIN_NAME: Administrador
+      CORS_ORIGIN: http://localhost:5173
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+    networks:
+      - leonel-platform-local
+
+  web:
+    build:
+      context: ../leonel-platform-frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: http://localhost:3000
+    container_name: leonel-platform-web
+    ports:
+      - "5173:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - leonel-platform-local
+
+networks:
+  leonel-platform-local:
+    name: leonel-platform-local
+
+volumes:
+  leonel-platform-postgres-data:
+    name: leonel-platform-postgres-data

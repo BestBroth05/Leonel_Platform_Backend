@@ -1,0 +1,36 @@
+{
+  "name": "@leonel-platform/api",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx src/infrastructure/db/migrate.ts",
+    "db:seed": "tsx src/infrastructure/db/seed.ts"
+  },
+  "dependencies": {
+    "@fastify/aws-lambda": "^5.1.4",
+    "@fastify/cors": "^10.0.2",
+    "@leonel-platform/shared": "workspace:*",
+    "argon2": "^0.41.1",
+    "drizzle-orm": "^0.38.4",
+    "fastify": "^5.2.1",
+    "jose": "^5.9.6",
+    "postgres": "^3.4.5",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.162",
+    "@types/node": "^22.10.7",
+    "drizzle-kit": "^0.30.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.8"
+  }
+}

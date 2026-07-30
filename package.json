@@ -1,0 +1,26 @@
+{
+  "name": "leonel-platform",
+  "private": true,
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "local:up": "node scripts/local-up.mjs",
+    "local:down": "node scripts/local-down.mjs",
+    "local:reset": "node scripts/local-reset.mjs",
+    "local:logs": "docker compose -f compose.local.yaml logs -f",
+    "local:test": "node scripts/local-test.mjs",
+    "local:sam": "echo \"SAM local will be available after infrastructure/template.yaml is added (block 3).\" && exit 0",
+    "lint": "pnpm -r --if-present lint",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "pnpm -r --if-present test",
+    "build": "pnpm -r --if-present build",
+    "db:generate": "pnpm --filter @leonel-platform/api db:generate",
+    "db:migrate": "pnpm --filter @leonel-platform/api db:migrate",
+    "db:seed": "pnpm --filter @leonel-platform/api db:seed"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}
