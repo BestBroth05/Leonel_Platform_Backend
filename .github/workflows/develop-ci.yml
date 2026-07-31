@@ -29,7 +29,7 @@ jobs:
       JWT_ACCESS_SECRET: ci-access-secret-change-me
       LEONEL_PLATFORM_ENV: ci
       ADMIN_EMAIL: admin@leonel-platform.local
-      ADMIN_PASSWORD: ChangeMeLocalOnly!
+      ADMIN_PASSWORD: Pass123!
 
     steps:
       - uses: actions/checkout@v4

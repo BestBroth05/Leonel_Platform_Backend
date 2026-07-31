@@ -73,7 +73,7 @@ async function main() {
   console.log("  Web:  http://localhost:5173");
   console.log("  API:  http://localhost:3000");
   console.log("  Health: http://localhost:3000/health");
-  console.log("  Admin: admin@leonel-platform.local / ChangeMeLocalOnly!");
+  console.log("  Admin: admin@leonel-platform.local / Pass123!");
   console.log("");
   console.log("Logs: pnpm local:logs");
 }

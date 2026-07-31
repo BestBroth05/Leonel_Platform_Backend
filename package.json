@@ -18,7 +18,8 @@
     "build": "pnpm -r --if-present build",
     "db:generate": "pnpm --filter @leonel-platform/api db:generate",
     "db:migrate": "pnpm --filter @leonel-platform/api db:migrate",
-    "db:seed": "pnpm --filter @leonel-platform/api db:seed"
+    "db:seed": "pnpm --filter @leonel-platform/api db:seed",
+    "db:seed:demo": "pnpm --filter @leonel-platform/api db:seed:demo"
   },
   "devDependencies": {
     "typescript": "^5.7.3"

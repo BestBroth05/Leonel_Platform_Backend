@@ -35,7 +35,7 @@ services:
       JWT_ACCESS_TTL_SECONDS: "900"
       JWT_REFRESH_TTL_DAYS: "7"
       ADMIN_EMAIL: admin@leonel-platform.local
-      ADMIN_PASSWORD: ChangeMeLocalOnly!
+      ADMIN_PASSWORD: Pass123!
       ADMIN_NAME: Administrador
       CORS_ORIGIN: http://localhost:5173
     ports:
@@ -61,7 +61,8 @@ services:
       context: ../leonel-platform-frontend
       dockerfile: Dockerfile
       args:
-        VITE_API_URL: http://localhost:3000
+        # Same-origin via nginx /api proxy (works on localhost and phone LAN IP)
+        VITE_API_URL: /api
     container_name: leonel-platform-web
     ports:
       - "5173:80"

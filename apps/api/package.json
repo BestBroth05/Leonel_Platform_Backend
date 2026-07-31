@@ -12,7 +12,8 @@
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/infrastructure/db/migrate.ts",
-    "db:seed": "tsx src/infrastructure/db/seed.ts"
+    "db:seed": "tsx src/infrastructure/db/seed.ts",
+    "db:seed:demo": "tsx src/infrastructure/db/seed-demo.ts"
   },
   "dependencies": {
     "@fastify/aws-lambda": "^5.1.4",

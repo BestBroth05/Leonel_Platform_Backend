@@ -24,7 +24,7 @@ async function main() {
   const adminEmail = (
     process.env.ADMIN_EMAIL ?? "admin@leonel-platform.local"
   ).toLowerCase();
-  const adminPassword = process.env.ADMIN_PASSWORD ?? "ChangeMeLocalOnly!";
+  const adminPassword = process.env.ADMIN_PASSWORD ?? "Pass123!";
   const adminName = process.env.ADMIN_NAME ?? "Administrador";
 
   const roleDefs = [
@@ -114,8 +114,9 @@ async function main() {
     where: eq(users.email, adminEmail),
   });
 
+  const passwordHash = await argon2.hash(adminPassword);
+
   if (!existingAdmin) {
-    const passwordHash = await argon2.hash(adminPassword);
     const [created] = await db
       .insert(users)
       .values({
@@ -136,10 +137,15 @@ async function main() {
     });
     console.log(`[seed] Admin user created: ${adminEmail}`);
   } else {
-    console.log(`[seed] Admin user already exists: ${adminEmail}`);
+    // Local/CI: keep seed password in sync so env changes apply on restart
+    await db
+      .update(users)
+      .set({ passwordHash, updatedAt: new Date() })
+      .where(eq(users.id, existingAdmin.id));
+    console.log(`[seed] Admin password refreshed: ${adminEmail}`);
   }
 
-  for (const name of ["Genérica", "Premium"]) {
+  for (const name of ["Denim", "Premium", "Genérica"]) {
     const existing = await db.query.brands.findFirst({ where: eq(brands.name, name) });
     if (!existing) await db.insert(brands).values({ name });
   }
@@ -156,6 +162,9 @@ async function main() {
     if (!existing) await db.insert(destinations).values({ name });
   }
   console.log("[seed] Catalog samples ensured");
+
+  const { runDemoSeed } = await import("./seed-demo.js");
+  await runDemoSeed(db);
 
   await closeDb();
 }

@@ -46,7 +46,19 @@ URLs:
 Usuario seed (solo local/CI):
 
 - Email: `admin@leonel-platform.local`
-- Password: `ChangeMeLocalOnly!`
+- Password: `Pass123!`
+
+### Ejemplo operativo (seed)
+
+Al levantar local queda el pedido **PED-1024** de **Lider Jeans** (marca Denim, tipo Mezclilla):
+
+1. Esperaban 1,000 → recibieron 980 (faltante informativo 20)
+2. 15 a compostura → regresaron 10 (quedan 5)
+3. Merma 5
+4. Salida parcial 400 → CD Norte
+5. Disponible **570**, estado: salida parcial
+
+En la app: **Pedidos → PED-1024**. Para regenerarlo: `pnpm db:seed:demo`.
 
 ## Comandos
 
