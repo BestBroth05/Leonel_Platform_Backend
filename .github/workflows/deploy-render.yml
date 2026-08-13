@@ -1,0 +1,84 @@
+name: deploy-render
+
+# Despliega el backend en Render tras CI exitoso en develop.
+# Requiere secret RENDER_DEPLOY_HOOK_URL (Deploy Hook del Web Service).
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: leonel_platform
+          POSTGRES_USER: leonel_platform
+          POSTGRES_PASSWORD: leonel_platform_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U leonel_platform -d leonel_platform"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://leonel_platform:leonel_platform_ci@localhost:5432/leonel_platform
+      JWT_ACCESS_SECRET: ci-access-secret-change-me
+      LEONEL_PLATFORM_ENV: ci
+      ADMIN_EMAIL: admin@leonel-platform.local
+      ADMIN_PASSWORD: Pass123!
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared
+        run: pnpm --filter @leonel-platform/shared build
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Migrate + seed
+        run: |
+          pnpm db:migrate
+          pnpm db:seed
+
+      - name: Build API
+        run: pnpm --filter @leonel-platform/api build
+
+  deploy:
+    needs: ci
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render deploy hook
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$RENDER_DEPLOY_HOOK_URL" ]; then
+            echo "Falta el secret RENDER_DEPLOY_HOOK_URL."
+            echo "En Render: Web Service → Settings → Deploy Hook → copiar URL."
+            echo "En GitHub: Settings → Secrets → Actions → New secret."
+            exit 1
+          fi
+          curl -fsS -X POST "$RENDER_DEPLOY_HOOK_URL"
+          echo "Deploy disparado en Render."

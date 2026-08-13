@@ -27,6 +27,7 @@ export type ApiErrorBody = {
   error: {
     code: string;
     message: string;
+    details?: unknown;
   };
 };
 
@@ -70,18 +71,68 @@ export const MOVEMENT_TYPES = [
   "SHRINKAGE",
   "PARTIAL_EXIT",
   "FINAL_EXIT",
+  "SOBRANTE_LINEA",
   "CORRECTION",
   "CANCELLATION",
 ] as const;
 
 export type MovementType = (typeof MOVEMENT_TYPES)[number];
 
+export const CUT_STATUSES = ["PENDING", "PARTIAL", "COMPLETE", "SURPLUS"] as const;
+export type CutStatus = (typeof CUT_STATUSES)[number];
+
+export const CLIENT_WEEK_STATUSES = ["OPEN", "CLOSED"] as const;
+export type ClientWeekStatus = (typeof CLIENT_WEEK_STATUSES)[number];
+
+export const SNAPSHOT_STATUSES = ["CURRENT", "INVALIDATED"] as const;
+export type SnapshotStatus = (typeof SNAPSHOT_STATUSES)[number];
+
+export const PACKAGING_TYPES = ["BOX", "DOZEN", "UNIT"] as const;
+export type PackagingType = (typeof PACKAGING_TYPES)[number];
+
+/** Preferred weekdays for client week open/close schedule (not operational locks). */
+export const WEEKDAYS = [
+  "MONDAY",
+  "TUESDAY",
+  "WEDNESDAY",
+  "THURSDAY",
+  "FRIDAY",
+  "SATURDAY",
+  "SUNDAY",
+] as const;
+export type Weekday = (typeof WEEKDAYS)[number];
+
 export type OrderBalance = {
+  /** Source of truth for new orders */
+  assignedQuantity: number;
+  /** @deprecated Legacy mirror; equals assignedQuantity for new flow */
   expectedQuantity: number;
+  /** Equals assignedQuantity in the new cut-based flow */
   received: number;
   inRepair: number;
   shrinkage: number;
   shipped: number;
+  lineSurplus: number;
   available: number;
   shortage: number;
+  pendingToAccount: number;
+  warnings: string[];
+};
+
+export type CutSettlementMetrics = {
+  cutId: string;
+  cutNumber: string;
+  totalReceivedByCut: number;
+  deliveredByCut: number;
+  shrinkageByCut: number;
+  lineSurplusByCut: number;
+  finalizedByCut: number;
+  sentToRepairByCut: number;
+  returnedFromRepairByCut: number;
+  inRepairByCut: number;
+  totalAssignedByCut: number;
+  unassignedByCut: number;
+  pendingByCut: number;
+  squared: boolean;
+  reasons: string[];
 };

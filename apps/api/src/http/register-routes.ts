@@ -3,13 +3,19 @@ import { z } from "zod";
 import {
   MOVEMENT_TYPES,
   ORDER_STATUSES,
+  PACKAGING_TYPES,
   PERMISSIONS,
+  WEEKDAYS,
   type MovementType,
   type OrderStatus,
+  type PackagingType,
   type RoleSlug,
 } from "@leonel-platform/shared";
 import type { ClientsService } from "../application/clients/clients-service.js";
 import type { CatalogsService } from "../application/catalogs/catalogs-service.js";
+import type { ClientWeeksService } from "../application/client-weeks/client-weeks-service.js";
+import type { ProductionFormatsService } from "../application/production-formats/production-formats-service.js";
+import type { CutsService } from "../application/cuts/cuts-service.js";
 import type { OrdersService } from "../application/orders/orders-service.js";
 import type { InventoryService } from "../application/inventory/inventory-service.js";
 import type { UsersService } from "../application/users/users-service.js";
@@ -21,6 +27,9 @@ export type RouteServices = {
   usersService: UsersService;
   clientsService: ClientsService;
   catalogsService: CatalogsService;
+  clientWeeksService: ClientWeeksService;
+  productionFormatsService: ProductionFormatsService;
+  cutsService: CutsService;
   ordersService: OrdersService;
   inventoryService: InventoryService;
 };
@@ -96,6 +105,8 @@ export async function registerDomainRoutes(app: FastifyInstance, deps: RouteServ
     },
   );
 
+  const weekdaySchema = z.enum(WEEKDAYS).nullable().optional();
+
   app.post(
     "/clients",
     { preHandler: requirePermission(PERMISSIONS.CLIENTS_WRITE) },
@@ -104,10 +115,11 @@ export async function registerDomainRoutes(app: FastifyInstance, deps: RouteServ
         .object({
           name: z.string().min(1),
           contactName: z.string().nullable().optional(),
-          phone: z.string().nullable().optional(),
           email: z.string().email().nullable().optional().or(z.literal("")),
           rfc: z.string().nullable().optional(),
           notes: z.string().nullable().optional(),
+          weekOpensOn: weekdaySchema,
+          weekClosesOn: weekdaySchema,
         })
         .parse(request.body);
       return deps.clientsService.create(
@@ -129,10 +141,11 @@ export async function registerDomainRoutes(app: FastifyInstance, deps: RouteServ
         .object({
           name: z.string().min(1).optional(),
           contactName: z.string().nullable().optional(),
-          phone: z.string().nullable().optional(),
           email: z.string().email().nullable().optional().or(z.literal("")),
           rfc: z.string().nullable().optional(),
           notes: z.string().nullable().optional(),
+          weekOpensOn: weekdaySchema,
+          weekClosesOn: weekdaySchema,
           isActive: z.boolean().optional(),
         })
         .parse(request.body);
@@ -144,6 +157,91 @@ export async function registerDomainRoutes(app: FastifyInstance, deps: RouteServ
         },
         request.auth!.sub,
       );
+    },
+  );
+
+  // —— Client weeks / settlement ——
+  app.get(
+    "/clients/:id/weeks",
+    { preHandler: requirePermission(PERMISSIONS.CLIENTS_READ) },
+    async (request) => {
+      const params = z.object({ id: z.string().uuid() }).parse(request.params);
+      return deps.clientWeeksService.listByClient(params.id);
+    },
+  );
+
+  app.get(
+    "/clients/:id/weeks/open",
+    { preHandler: requirePermission(PERMISSIONS.CLIENTS_READ) },
+    async (request) => {
+      const params = z.object({ id: z.string().uuid() }).parse(request.params);
+      return deps.clientWeeksService.getOpenWeek(params.id);
+    },
+  );
+
+  app.post(
+    "/clients/:id/weeks/open",
+    { preHandler: requirePermission(PERMISSIONS.CLIENTS_WRITE) },
+    async (request) => {
+      const params = z.object({ id: z.string().uuid() }).parse(request.params);
+      const body = z
+        .object({ startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() })
+        .parse(request.body ?? {});
+      return deps.clientWeeksService.openWeek(params.id, request.auth!.sub, body);
+    },
+  );
+
+  app.get(
+    "/client-weeks/:id",
+    { preHandler: requirePermission(PERMISSIONS.CLIENTS_READ) },
+    async (request) => {
+      const params = z.object({ id: z.string().uuid() }).parse(request.params);
+      return deps.clientWeeksService.getById(params.id);
+    },
+  );
+
+  app.get(
+    "/client-weeks/:id/close-preview",
+    { preHandler: requirePermission(PERMISSIONS.CLIENTS_READ) },
+    async (request) => {
+      const params = z.object({ id: z.string().uuid() }).parse(request.params);
+      return deps.clientWeeksService.previewClose(params.id);
+    },
+  );
+
+  app.post(
+    "/client-weeks/:id/close",
+    { preHandler: requirePermission(PERMISSIONS.CLIENTS_WRITE) },
+    async (request) => {
+      const params = z.object({ id: z.string().uuid() }).parse(request.params);
+      return deps.clientWeeksService.closeWeek(params.id, request.auth!.sub);
+    },
+  );
+
+  app.post(
+    "/client-weeks/:id/reopen",
+    { preHandler: requirePermission(PERMISSIONS.CLIENTS_WRITE) },
+    async (request) => {
+      const params = z.object({ id: z.string().uuid() }).parse(request.params);
+      return deps.clientWeeksService.reopenWeek(params.id, request.auth!.sub);
+    },
+  );
+
+  app.get(
+    "/client-weeks/:id/snapshots",
+    { preHandler: requirePermission(PERMISSIONS.CLIENTS_READ) },
+    async (request) => {
+      const params = z.object({ id: z.string().uuid() }).parse(request.params);
+      return deps.clientWeeksService.listSnapshots(params.id);
+    },
+  );
+
+  app.get(
+    "/client-weeks/:id/snapshots/current",
+    { preHandler: requirePermission(PERMISSIONS.CLIENTS_READ) },
+    async (request) => {
+      const params = z.object({ id: z.string().uuid() }).parse(request.params);
+      return deps.clientWeeksService.getCurrentSnapshot(params.id);
     },
   );
 
@@ -199,6 +297,187 @@ export async function registerDomainRoutes(app: FastifyInstance, deps: RouteServ
     },
   );
 
+  // —— Production formats ——
+  app.get(
+    "/production-formats",
+    { preHandler: requirePermission(PERMISSIONS.ORDERS_READ) },
+    async (request) => {
+      const query = pagination.extend({ q: z.string().optional() }).parse(request.query);
+      return deps.productionFormatsService.list(query);
+    },
+  );
+
+  app.get(
+    "/production-formats/:id",
+    { preHandler: requirePermission(PERMISSIONS.ORDERS_READ) },
+    async (request) => {
+      const params = z.object({ id: z.string().uuid() }).parse(request.params);
+      return deps.productionFormatsService.getById(params.id);
+    },
+  );
+
+  app.post(
+    "/production-formats",
+    { preHandler: requirePermission(PERMISSIONS.ORDERS_WRITE) },
+    async (request) => {
+      const body = z
+        .object({
+          number: z.string().min(1),
+          clientId: z.string().uuid(),
+        })
+        .parse(request.body);
+      return deps.productionFormatsService.create(body, request.auth!.sub);
+    },
+  );
+
+  app.patch(
+    "/production-formats/:id",
+    { preHandler: requirePermission(PERMISSIONS.ORDERS_WRITE) },
+    async (request) => {
+      const params = z.object({ id: z.string().uuid() }).parse(request.params);
+      const body = z
+        .object({
+          number: z.string().min(1).optional(),
+          clientId: z.string().uuid().optional(),
+        })
+        .parse(request.body);
+      return deps.productionFormatsService.update(params.id, body, request.auth!.sub);
+    },
+  );
+
+  app.get(
+    "/production-formats/:id/cuts",
+    { preHandler: requirePermission(PERMISSIONS.ORDERS_READ) },
+    async (request) => {
+      const params = z.object({ id: z.string().uuid() }).parse(request.params);
+      return deps.cutsService.listByFormat(params.id);
+    },
+  );
+
+  app.post(
+    "/production-formats/:id/cuts",
+    { preHandler: requirePermission(PERMISSIONS.ORDERS_WRITE) },
+    async (request) => {
+      const params = z.object({ id: z.string().uuid() }).parse(request.params);
+      const body = z
+        .object({
+          number: z.string().min(1),
+          workPlan: z.string().min(1),
+          style: z.string().min(1),
+          expectedQuantity: z.number().int().positive(),
+        })
+        .parse(request.body);
+      return deps.cutsService.create(params.id, body, request.auth!.sub);
+    },
+  );
+
+  app.get(
+    "/production-formats/:id/orders",
+    { preHandler: requirePermission(PERMISSIONS.ORDERS_READ) },
+    async (request) => {
+      const params = z.object({ id: z.string().uuid() }).parse(request.params);
+      const query = pagination
+        .extend({
+          q: z.string().optional(),
+          status: z.enum(ORDER_STATUSES).optional(),
+        })
+        .parse(request.query);
+      return deps.ordersService.list({
+        ...query,
+        productionFormatId: params.id,
+      });
+    },
+  );
+
+  // —— Cuts ——
+  app.get(
+    "/cuts/:id",
+    { preHandler: requirePermission(PERMISSIONS.ORDERS_READ) },
+    async (request) => {
+      const params = z.object({ id: z.string().uuid() }).parse(request.params);
+      return deps.cutsService.getById(params.id);
+    },
+  );
+
+  app.get(
+    "/cuts/:id/orders",
+    { preHandler: requirePermission(PERMISSIONS.ORDERS_READ) },
+    async (request) => {
+      const params = z.object({ id: z.string().uuid() }).parse(request.params);
+      return deps.cutsService.listOrdersUsingCut(params.id);
+    },
+  );
+
+  app.patch(
+    "/cuts/:id",
+    { preHandler: requirePermission(PERMISSIONS.ORDERS_WRITE) },
+    async (request) => {
+      const params = z.object({ id: z.string().uuid() }).parse(request.params);
+      const body = z
+        .object({
+          number: z.string().min(1).optional(),
+          workPlan: z.string().min(1).optional(),
+          style: z.string().min(1).optional(),
+          expectedQuantity: z.number().int().positive().optional(),
+        })
+        .parse(request.body);
+      return deps.cutsService.update(params.id, body, request.auth!.sub);
+    },
+  );
+
+  app.get(
+    "/cuts/:id/receipts",
+    { preHandler: requirePermission(PERMISSIONS.ORDERS_READ) },
+    async (request) => {
+      const params = z.object({ id: z.string().uuid() }).parse(request.params);
+      return deps.cutsService.listReceipts(params.id);
+    },
+  );
+
+  app.post(
+    "/cuts/:id/receipts",
+    { preHandler: requirePermission(PERMISSIONS.ORDERS_WRITE) },
+    async (request) => {
+      const params = z.object({ id: z.string().uuid() }).parse(request.params);
+      const body = z
+        .object({
+          folioNumber: z.string().min(1),
+          quantity: z.number().int().positive(),
+          receivedAt: z.string().datetime().optional(),
+          notes: z.string().nullable().optional(),
+        })
+        .parse(request.body);
+      return deps.cutsService.createReceipt(params.id, body, request.auth!.sub);
+    },
+  );
+
+  app.patch(
+    "/cut-receipts/:id",
+    { preHandler: requirePermission(PERMISSIONS.ORDERS_WRITE) },
+    async (request) => {
+      const params = z.object({ id: z.string().uuid() }).parse(request.params);
+      const body = z
+        .object({
+          folioNumber: z.string().min(1).optional(),
+          quantity: z.number().int().positive().optional(),
+          receivedAt: z.string().datetime().optional(),
+          notes: z.string().nullable().optional(),
+        })
+        .parse(request.body);
+      return deps.cutsService.updateReceipt(params.id, body, request.auth!.sub);
+    },
+  );
+
+  app.delete(
+    "/cut-receipts/:id",
+    { preHandler: requirePermission(PERMISSIONS.ORDERS_WRITE) },
+    async (request) => {
+      const params = z.object({ id: z.string().uuid() }).parse(request.params);
+      await deps.cutsService.deleteReceipt(params.id, request.auth!.sub);
+      return { ok: true };
+    },
+  );
+
   // —— Orders ——
   app.get(
     "/orders",
@@ -209,6 +488,7 @@ export async function registerDomainRoutes(app: FastifyInstance, deps: RouteServ
           q: z.string().optional(),
           status: z.enum(ORDER_STATUSES).optional(),
           clientId: z.string().uuid().optional(),
+          productionFormatId: z.string().uuid().optional(),
         })
         .parse(request.query);
       return deps.ordersService.list(query);
@@ -233,6 +513,17 @@ export async function registerDomainRoutes(app: FastifyInstance, deps: RouteServ
     },
   );
 
+  const cutAssignmentSchema = z.object({
+    cutId: z.string().uuid(),
+    assignedQuantity: z.number().int().positive(),
+  });
+
+  const packagingTypeSchema = z.enum(PACKAGING_TYPES).nullable().optional();
+  const sizeBreakdownSchema = z.object({
+    sizeLabel: z.string().min(1),
+    quantity: z.number().int().positive(),
+  });
+
   app.post(
     "/orders",
     { preHandler: requirePermission(PERMISSIONS.ORDERS_WRITE) },
@@ -240,14 +531,29 @@ export async function registerDomainRoutes(app: FastifyInstance, deps: RouteServ
       const body = z
         .object({
           number: z.string().min(1),
-          clientId: z.string().uuid(),
+          clientId: z.string().uuid().optional(),
+          productionFormatId: z.string().uuid(),
+          cuts: z.array(cutAssignmentSchema).min(1),
           brandId: z.string().uuid().nullable().optional(),
           pantTypeId: z.string().uuid().nullable().optional(),
-          expectedQuantity: z.number().int().positive(),
+          purchaseOrder: z.string().nullable().optional(),
+          costPerGarment: z.union([z.string(), z.number()]).nullable().optional(),
+          packagingType: packagingTypeSchema,
+          packageCount: z.number().int().positive().nullable().optional(),
+          unitsPerPackage: z.number().int().positive().nullable().optional(),
+          sizes: z.array(sizeBreakdownSchema).optional(),
           notes: z.string().nullable().optional(),
         })
         .parse(request.body);
-      return deps.ordersService.create(body, request.auth!.sub);
+      return deps.ordersService.create(
+        {
+          ...body,
+          packagingType: body.packagingType as PackagingType | null | undefined,
+          costPerGarment:
+            body.costPerGarment == null ? null : String(body.costPerGarment),
+        },
+        request.auth!.sub,
+      );
     },
   );
 
@@ -260,11 +566,25 @@ export async function registerDomainRoutes(app: FastifyInstance, deps: RouteServ
         .object({
           brandId: z.string().uuid().nullable().optional(),
           pantTypeId: z.string().uuid().nullable().optional(),
-          expectedQuantity: z.number().int().positive().optional(),
+          cuts: z.array(cutAssignmentSchema).min(1).optional(),
+          purchaseOrder: z.string().nullable().optional(),
+          costPerGarment: z.union([z.string(), z.number()]).nullable().optional(),
           notes: z.string().nullable().optional(),
         })
         .parse(request.body);
-      return deps.ordersService.update(params.id, body, request.auth!.sub);
+      return deps.ordersService.update(
+        params.id,
+        {
+          ...body,
+          costPerGarment:
+            body.costPerGarment === undefined
+              ? undefined
+              : body.costPerGarment == null
+                ? null
+                : String(body.costPerGarment),
+        },
+        request.auth!.sub,
+      );
     },
   );
 
@@ -315,10 +635,23 @@ export async function registerDomainRoutes(app: FastifyInstance, deps: RouteServ
       const body = z
         .object({
           type: z.enum(MOVEMENT_TYPES),
-          quantity: z.number().int(),
+          quantity: z.number().int().optional(),
+          packagingType: packagingTypeSchema,
+          packageCount: z.number().int().positive().nullable().optional(),
+          unitsPerPackage: z.number().int().positive().nullable().optional(),
           note: z.string().nullable().optional(),
           destinationId: z.string().uuid().nullable().optional(),
           idempotencyKey: z.string().min(1).max(128).optional(),
+          occurredAt: z.string().datetime().optional(),
+          cutAllocations: z
+            .array(
+              z.object({
+                orderCutId: z.string().uuid(),
+                quantity: z.number().int().positive(),
+              }),
+            )
+            .optional(),
+          sizes: z.array(sizeBreakdownSchema).optional(),
         })
         .parse(request.body);
 
@@ -332,9 +665,15 @@ export async function registerDomainRoutes(app: FastifyInstance, deps: RouteServ
           orderId: params.id,
           type: body.type as MovementType,
           quantity: body.quantity,
+          packagingType: body.packagingType as PackagingType | null | undefined,
+          packageCount: body.packageCount,
+          unitsPerPackage: body.unitsPerPackage,
           note: body.note,
           destinationId: body.destinationId,
           idempotencyKey: body.idempotencyKey ?? idempotencyHeader,
+          occurredAt: body.occurredAt,
+          cutAllocations: body.cutAllocations,
+          sizes: body.sizes,
         },
         request.auth!.sub,
         request.auth!.permissions,
@@ -370,6 +709,5 @@ export async function registerDomainRoutes(app: FastifyInstance, deps: RouteServ
     },
   );
 
-  // Keep requireAuth referenced for future use without lint noise
   void requireAuth;
 }

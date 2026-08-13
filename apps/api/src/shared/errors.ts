@@ -3,6 +3,7 @@ export class AppError extends Error {
     public readonly code: string,
     message: string,
     public readonly statusCode = 400,
+    public readonly details?: unknown,
   ) {
     super(message);
     this.name = "AppError";
@@ -28,7 +29,7 @@ export class NotFoundError extends AppError {
 }
 
 export class ConflictError extends AppError {
-  constructor(message = "Conflicto") {
-    super("CONFLICT", message, 409);
+  constructor(message = "Conflicto", details?: unknown) {
+    super("CONFLICT", message, 409, details);
   }
 }

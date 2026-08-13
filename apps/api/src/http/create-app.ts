@@ -4,6 +4,9 @@ import { z } from "zod";
 import type { AuthService } from "../application/auth/auth-service.js";
 import type { ClientsService } from "../application/clients/clients-service.js";
 import type { CatalogsService } from "../application/catalogs/catalogs-service.js";
+import type { ClientWeeksService } from "../application/client-weeks/client-weeks-service.js";
+import type { ProductionFormatsService } from "../application/production-formats/production-formats-service.js";
+import type { CutsService } from "../application/cuts/cuts-service.js";
 import type { OrdersService } from "../application/orders/orders-service.js";
 import type { InventoryService } from "../application/inventory/inventory-service.js";
 import type { UsersService } from "../application/users/users-service.js";
@@ -19,6 +22,9 @@ export type AppDeps = {
   usersService: UsersService;
   clientsService: ClientsService;
   catalogsService: CatalogsService;
+  clientWeeksService: ClientWeeksService;
+  productionFormatsService: ProductionFormatsService;
+  cutsService: CutsService;
   ordersService: OrdersService;
   inventoryService: InventoryService;
 };
@@ -38,7 +44,11 @@ export async function createApp(deps: AppDeps) {
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof AppError) {
       return reply.status(error.statusCode).send({
-        error: { code: error.code, message: error.message },
+        error: {
+          code: error.code,
+          message: error.message,
+          ...(error.details !== undefined ? { details: error.details } : {}),
+        },
       });
     }
     if (error instanceof z.ZodError) {
@@ -103,6 +113,9 @@ export async function createApp(deps: AppDeps) {
     usersService: deps.usersService,
     clientsService: deps.clientsService,
     catalogsService: deps.catalogsService,
+    clientWeeksService: deps.clientWeeksService,
+    productionFormatsService: deps.productionFormatsService,
+    cutsService: deps.cutsService,
     ordersService: deps.ordersService,
     inventoryService: deps.inventoryService,
   });

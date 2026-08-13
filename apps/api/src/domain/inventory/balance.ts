@@ -6,20 +6,34 @@ export type BalanceMovement = {
   cancelled: boolean;
 };
 
+export type BalanceOptions = {
+  /**
+   * When true, RECEPTION/ADDITIONAL_ENTRY do not increase the baseline.
+   * Cut receipts + assignedQuantity are the physical intake source of truth.
+   */
+  useAssignedBaseline?: boolean;
+};
+
 /**
- * Provisional balance formula (plan §5):
- * available = received − inRepair − shrinkage − shipped
- * RECEPTION_SHORTAGE is informational only.
+ * Order balance:
+ * - New flow: initial = assignedQuantity; operational movements apply against it.
+ * - Legacy (no assigned baseline): RECEPTION/ADDITIONAL_ENTRY still increase stock.
+ * - inRepair = sentToRepair − returnedFromRepair (net; return is not a new entry).
+ * - available = received − inRepair − shrinkage − shipped − lineSurplus
  */
 export function computeOrderBalance(
-  expectedQuantity: number,
+  assignedQuantity: number,
   movements: BalanceMovement[],
+  options: BalanceOptions = {},
 ): OrderBalance {
-  let received = 0;
-  let inRepair = 0;
+  const useAssigned = options.useAssignedBaseline ?? assignedQuantity > 0;
+  let entryFromMovements = 0;
+  let sentToRepair = 0;
+  let returnedFromRepair = 0;
   let shrinkage = 0;
   let shipped = 0;
   let shortage = 0;
+  let lineSurplus = 0;
 
   for (const movement of movements) {
     if (movement.cancelled) continue;
@@ -28,16 +42,18 @@ export function computeOrderBalance(
     switch (movement.type) {
       case "RECEPTION":
       case "ADDITIONAL_ENTRY":
-        received += qty;
+        if (!useAssigned) {
+          entryFromMovements += qty;
+        }
         break;
       case "RECEPTION_SHORTAGE":
         shortage += qty;
         break;
       case "SEND_TO_REPAIR":
-        inRepair += qty;
+        sentToRepair += qty;
         break;
       case "RETURN_FROM_REPAIR":
-        inRepair -= qty;
+        returnedFromRepair += qty;
         break;
       case "SHRINKAGE":
         shrinkage += qty;
@@ -46,46 +62,80 @@ export function computeOrderBalance(
       case "FINAL_EXIT":
         shipped += qty;
         break;
+      case "SOBRANTE_LINEA":
+        lineSurplus += qty;
+        break;
       case "CORRECTION":
-        // Signed quantity: positive increases available stock (as received),
-        // negative decreases via shrinkage semantics for simplicity.
         if (qty >= 0) {
-          received += qty;
+          entryFromMovements += qty;
         } else {
           shrinkage += Math.abs(qty);
         }
         break;
       case "CANCELLATION":
-        // Compensating rows are applied via cancelled flag on originals
-        // or as opposite effects stored by the service before insert.
         break;
       default:
         break;
     }
   }
 
-  const available = received - inRepair - shrinkage - shipped;
+  const received = useAssigned
+    ? assignedQuantity + entryFromMovements
+    : entryFromMovements;
+  const inRepair = Math.max(0, sentToRepair - returnedFromRepair);
+  const available = received - inRepair - shrinkage - shipped - lineSurplus;
+  const pendingToAccount = Math.max(0, available);
+
+  const warnings: string[] = [];
+  if (available < 0) {
+    warnings.push(
+      `Los movimientos superan la cantidad asignada (disponible ${available.toLocaleString("es-MX")}).`,
+    );
+  }
+  if (returnedFromRepair > sentToRepair) {
+    warnings.push("Hay más regresos de compostura que envíos.");
+  }
+  if (shipped + shrinkage + lineSurplus > received) {
+    warnings.push(
+      "Las salidas finales (entregas + merma + sobrante) superan la cantidad asignada.",
+    );
+  }
+  if (useAssigned && pendingToAccount > 0) {
+    warnings.push(
+      `Quedan ${pendingToAccount.toLocaleString("es-MX")} prendas pendientes de contabilizar o entregar.`,
+    );
+  }
 
   return {
-    expectedQuantity,
+    assignedQuantity: useAssigned ? assignedQuantity : received,
+    expectedQuantity: useAssigned ? assignedQuantity : received,
     received,
     inRepair,
     shrinkage,
     shipped,
+    lineSurplus,
     available,
     shortage,
+    pendingToAccount,
+    warnings,
   };
 }
 
-export function movementDeltaOnAvailable(type: MovementType, quantity: number): number {
+export function movementDeltaOnAvailable(
+  type: MovementType,
+  quantity: number,
+  options: BalanceOptions = {},
+): number {
+  const useAssigned = options.useAssignedBaseline ?? true;
   switch (type) {
     case "RECEPTION":
     case "ADDITIONAL_ENTRY":
-      return quantity;
+      return useAssigned ? 0 : quantity;
     case "SEND_TO_REPAIR":
     case "SHRINKAGE":
     case "PARTIAL_EXIT":
     case "FINAL_EXIT":
+    case "SOBRANTE_LINEA":
       return -quantity;
     case "RETURN_FROM_REPAIR":
       return quantity;

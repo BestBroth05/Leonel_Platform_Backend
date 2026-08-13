@@ -1,31 +1,42 @@
 import { and, desc, eq, ilike, isNull, sql } from "drizzle-orm";
+import { WEEKDAYS, type Weekday } from "@leonel-platform/shared";
 import type { AppDb } from "../../infrastructure/db/client.js";
 import { writeAudit } from "../../infrastructure/db/audit.js";
 import { clients } from "../../infrastructure/db/schema.js";
-import { ConflictError, NotFoundError } from "../../shared/errors.js";
+import { AppError, ConflictError, NotFoundError } from "../../shared/errors.js";
 
 export type ClientDto = {
   id: string;
   name: string;
   contactName: string | null;
-  phone: string | null;
   email: string | null;
   rfc: string | null;
   notes: string | null;
+  weekOpensOn: Weekday | null;
+  weekClosesOn: Weekday | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
 };
+
+function parseWeekday(value: string | null | undefined, field: string): Weekday | null {
+  if (value == null || value === "") return null;
+  if (!(WEEKDAYS as readonly string[]).includes(value)) {
+    throw new AppError("VALIDATION_ERROR", `${field} debe ser un día de la semana válido`);
+  }
+  return value as Weekday;
+}
 
 function toDto(row: typeof clients.$inferSelect): ClientDto {
   return {
     id: row.id,
     name: row.name,
     contactName: row.contactName,
-    phone: row.phone,
     email: row.email,
     rfc: row.rfc,
     notes: row.notes,
+    weekOpensOn: (row.weekOpensOn as Weekday | null) ?? null,
+    weekClosesOn: (row.weekClosesOn as Weekday | null) ?? null,
     isActive: row.isActive,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -87,25 +98,30 @@ export class ClientsService {
     input: {
       name: string;
       contactName?: string | null;
-      phone?: string | null;
       email?: string | null;
       rfc?: string | null;
       notes?: string | null;
+      weekOpensOn?: string | null;
+      weekClosesOn?: string | null;
     },
     actorUserId: string,
   ): Promise<ClientDto> {
     const name = input.name.trim();
     if (!name) throw new ConflictError("El nombre es obligatorio");
 
+    const weekOpensOn = parseWeekday(input.weekOpensOn, "El día de apertura");
+    const weekClosesOn = parseWeekday(input.weekClosesOn, "El día de cierre");
+
     const [row] = await this.db
       .insert(clients)
       .values({
         name,
         contactName: input.contactName?.trim() || null,
-        phone: input.phone?.trim() || null,
         email: input.email?.trim().toLowerCase() || null,
         rfc: input.rfc?.trim().toUpperCase() || null,
         notes: input.notes?.trim() || null,
+        weekOpensOn,
+        weekClosesOn,
         createdBy: actorUserId,
         updatedBy: actorUserId,
       })
@@ -127,10 +143,11 @@ export class ClientsService {
     input: {
       name?: string;
       contactName?: string | null;
-      phone?: string | null;
       email?: string | null;
       rfc?: string | null;
       notes?: string | null;
+      weekOpensOn?: string | null;
+      weekClosesOn?: string | null;
       isActive?: boolean;
     },
     actorUserId: string,
@@ -140,6 +157,15 @@ export class ClientsService {
     });
     if (!existing) throw new NotFoundError("Cliente no encontrado");
 
+    const weekOpensOn =
+      input.weekOpensOn !== undefined
+        ? parseWeekday(input.weekOpensOn, "El día de apertura")
+        : (existing.weekOpensOn as Weekday | null);
+    const weekClosesOn =
+      input.weekClosesOn !== undefined
+        ? parseWeekday(input.weekClosesOn, "El día de cierre")
+        : (existing.weekClosesOn as Weekday | null);
+
     const [row] = await this.db
       .update(clients)
       .set({
@@ -148,8 +174,6 @@ export class ClientsService {
           input.contactName !== undefined
             ? input.contactName?.trim() || null
             : existing.contactName,
-        phone:
-          input.phone !== undefined ? input.phone?.trim() || null : existing.phone,
         email:
           input.email !== undefined
             ? input.email?.trim().toLowerCase() || null
@@ -160,6 +184,8 @@ export class ClientsService {
             : existing.rfc,
         notes:
           input.notes !== undefined ? input.notes?.trim() || null : existing.notes,
+        weekOpensOn,
+        weekClosesOn,
         isActive: input.isActive ?? existing.isActive,
         updatedAt: new Date(),
         updatedBy: actorUserId,

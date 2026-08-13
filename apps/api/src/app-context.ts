@@ -1,6 +1,9 @@
 import { AuthService } from "./application/auth/auth-service.js";
 import { ClientsService } from "./application/clients/clients-service.js";
 import { CatalogsService } from "./application/catalogs/catalogs-service.js";
+import { ClientWeeksService } from "./application/client-weeks/client-weeks-service.js";
+import { ProductionFormatsService } from "./application/production-formats/production-formats-service.js";
+import { CutsService } from "./application/cuts/cuts-service.js";
 import { OrdersService } from "./application/orders/orders-service.js";
 import { InventoryService } from "./application/inventory/inventory-service.js";
 import { UsersService } from "./application/users/users-service.js";
@@ -19,6 +22,9 @@ export async function buildApp() {
   const usersService = new UsersService(db);
   const clientsService = new ClientsService(db);
   const catalogsService = new CatalogsService(db);
+  const clientWeeksService = new ClientWeeksService(db);
+  const productionFormatsService = new ProductionFormatsService(db);
+  const cutsService = new CutsService(db);
   const ordersService = new OrdersService(db);
   const inventoryService = new InventoryService(db, ordersService);
 
@@ -29,6 +35,9 @@ export async function buildApp() {
     usersService,
     clientsService,
     catalogsService,
+    clientWeeksService,
+    productionFormatsService,
+    cutsService,
     ordersService,
     inventoryService,
   });

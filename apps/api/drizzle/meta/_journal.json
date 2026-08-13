@@ -15,6 +15,41 @@
       "when": 1785453382213,
       "tag": "0001_phase2_domain",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785510000000,
+      "tag": "0002_production_formats",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1785511000000,
+      "tag": "0003_order_cuts",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1785512000000,
+      "tag": "0004_client_week_days",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1785513000000,
+      "tag": "0005_client_weeks_settlement",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785514000000,
+      "tag": "0006_restore_client_weekdays",
+      "breakpoints": true
     }
   ]
 }
