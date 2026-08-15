@@ -160,6 +160,16 @@ export async function registerDomainRoutes(app: FastifyInstance, deps: RouteServ
     },
   );
 
+  app.delete(
+    "/clients/:id",
+    { preHandler: requirePermission(PERMISSIONS.CLIENTS_WRITE) },
+    async (request) => {
+      const params = z.object({ id: z.string().uuid() }).parse(request.params);
+      await deps.clientsService.softDelete(params.id, request.auth!.sub);
+      return { ok: true };
+    },
+  );
+
   // —— Client weeks / settlement ——
   app.get(
     "/clients/:id/weeks",
@@ -297,6 +307,18 @@ export async function registerDomainRoutes(app: FastifyInstance, deps: RouteServ
     },
   );
 
+  app.delete(
+    "/catalogs/:kind/:id",
+    { preHandler: requirePermission(PERMISSIONS.CATALOGS_WRITE) },
+    async (request) => {
+      const params = z
+        .object({ kind: catalogKind, id: z.string().uuid() })
+        .parse(request.params);
+      await deps.catalogsService.softDelete(params.kind, params.id, request.auth!.sub);
+      return { ok: true };
+    },
+  );
+
   // —— Production formats ——
   app.get(
     "/production-formats",
@@ -342,6 +364,16 @@ export async function registerDomainRoutes(app: FastifyInstance, deps: RouteServ
         })
         .parse(request.body);
       return deps.productionFormatsService.update(params.id, body, request.auth!.sub);
+    },
+  );
+
+  app.delete(
+    "/production-formats/:id",
+    { preHandler: requirePermission(PERMISSIONS.ORDERS_WRITE) },
+    async (request) => {
+      const params = z.object({ id: z.string().uuid() }).parse(request.params);
+      await deps.productionFormatsService.softDelete(params.id, request.auth!.sub);
+      return { ok: true };
     },
   );
 
@@ -422,6 +454,16 @@ export async function registerDomainRoutes(app: FastifyInstance, deps: RouteServ
         })
         .parse(request.body);
       return deps.cutsService.update(params.id, body, request.auth!.sub);
+    },
+  );
+
+  app.delete(
+    "/cuts/:id",
+    { preHandler: requirePermission(PERMISSIONS.ORDERS_WRITE) },
+    async (request) => {
+      const params = z.object({ id: z.string().uuid() }).parse(request.params);
+      await deps.cutsService.softDelete(params.id, request.auth!.sub);
+      return { ok: true };
     },
   );
 
@@ -605,6 +647,16 @@ export async function registerDomainRoutes(app: FastifyInstance, deps: RouteServ
         request.auth!.sub,
         body.note,
       );
+    },
+  );
+
+  app.delete(
+    "/orders/:id",
+    { preHandler: requirePermission(PERMISSIONS.ORDERS_WRITE) },
+    async (request) => {
+      const params = z.object({ id: z.string().uuid() }).parse(request.params);
+      await deps.ordersService.softDelete(params.id, request.auth!.sub);
+      return { ok: true };
     },
   );
 

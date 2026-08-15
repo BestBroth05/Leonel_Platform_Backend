@@ -162,6 +162,43 @@ export class CatalogsService {
     return toDto(row);
   }
 
+  async softDelete(kind: CatalogKind, id: string, actorUserId: string): Promise<void> {
+    const now = new Date();
+    if (kind === "brands") {
+      const existing = await this.db.query.brands.findFirst({
+        where: and(eq(brands.id, id), isNull(brands.deletedAt)),
+      });
+      if (!existing) throw new NotFoundError("Marca no encontrada");
+      await this.db
+        .update(brands)
+        .set({ deletedAt: now, isActive: false, updatedAt: now })
+        .where(eq(brands.id, id));
+      await this.audit(actorUserId, kind, "delete", id, { name: existing.name });
+      return;
+    }
+    if (kind === "pant-types") {
+      const existing = await this.db.query.pantTypes.findFirst({
+        where: and(eq(pantTypes.id, id), isNull(pantTypes.deletedAt)),
+      });
+      if (!existing) throw new NotFoundError("Tipo no encontrado");
+      await this.db
+        .update(pantTypes)
+        .set({ deletedAt: now, isActive: false, updatedAt: now })
+        .where(eq(pantTypes.id, id));
+      await this.audit(actorUserId, kind, "delete", id, { name: existing.name });
+      return;
+    }
+    const existing = await this.db.query.destinations.findFirst({
+      where: and(eq(destinations.id, id), isNull(destinations.deletedAt)),
+    });
+    if (!existing) throw new NotFoundError("Destino no encontrado");
+    await this.db
+      .update(destinations)
+      .set({ deletedAt: now, isActive: false, updatedAt: now })
+      .where(eq(destinations.id, id));
+    await this.audit(actorUserId, kind, "delete", id, { name: existing.name });
+  }
+
   private async assertUniqueBrand(name: string, excludeId?: string) {
     const existing = await this.db.query.brands.findFirst({
       where: and(

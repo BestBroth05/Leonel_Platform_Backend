@@ -481,6 +481,43 @@ export class OrdersService {
     return this.getById(id);
   }
 
+  async softDelete(id: string, actorUserId: string): Promise<void> {
+    const existing = await this.db.query.orders.findFirst({
+      where: and(eq(orders.id, id), isNull(orders.deletedAt)),
+    });
+    if (!existing) throw new NotFoundError("Pedido no encontrado");
+
+    const now = new Date();
+    await this.db
+      .update(orders)
+      .set({
+        deletedAt: now,
+        status: existing.status === "CANCELLED" ? existing.status : "CANCELLED",
+        updatedAt: now,
+        updatedBy: actorUserId,
+        version: existing.version + 1,
+      })
+      .where(eq(orders.id, id));
+
+    if (existing.status !== "CANCELLED") {
+      await this.db.insert(orderStatusHistory).values({
+        orderId: id,
+        fromStatus: existing.status,
+        toStatus: "CANCELLED",
+        note: "Pedido eliminado",
+        actorUserId,
+      });
+    }
+
+    await writeAudit(this.db, {
+      actorUserId,
+      action: "orders.delete",
+      entityType: "order",
+      entityId: id,
+      metadata: { number: existing.number },
+    });
+  }
+
   async statusHistory(orderId: string) {
     await this.getById(orderId);
     const rows = await this.db

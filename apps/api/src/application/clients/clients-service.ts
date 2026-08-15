@@ -2,7 +2,7 @@ import { and, desc, eq, ilike, isNull, sql } from "drizzle-orm";
 import { WEEKDAYS, type Weekday } from "@leonel-platform/shared";
 import type { AppDb } from "../../infrastructure/db/client.js";
 import { writeAudit } from "../../infrastructure/db/audit.js";
-import { clients } from "../../infrastructure/db/schema.js";
+import { clients, productionFormats } from "../../infrastructure/db/schema.js";
 import { AppError, ConflictError, NotFoundError } from "../../shared/errors.js";
 
 export type ClientDto = {
@@ -201,5 +201,44 @@ export class ClientsService {
     });
 
     return toDto(row);
+  }
+
+  async softDelete(id: string, actorUserId: string): Promise<void> {
+    const existing = await this.db.query.clients.findFirst({
+      where: and(eq(clients.id, id), isNull(clients.deletedAt)),
+    });
+    if (!existing) throw new NotFoundError("Cliente no encontrado");
+
+    const formatCount = await this.db
+      .select({ count: sql<number>`cast(count(*) as int)` })
+      .from(productionFormats)
+      .where(
+        and(eq(productionFormats.clientId, id), isNull(productionFormats.deletedAt)),
+      )
+      .then((r) => r[0]?.count ?? 0);
+    if (formatCount > 0) {
+      throw new ConflictError(
+        `No se puede eliminar: el cliente tiene ${formatCount} formato(s). Elimínalos primero.`,
+      );
+    }
+
+    const now = new Date();
+    await this.db
+      .update(clients)
+      .set({
+        deletedAt: now,
+        isActive: false,
+        updatedAt: now,
+        updatedBy: actorUserId,
+      })
+      .where(eq(clients.id, id));
+
+    await writeAudit(this.db, {
+      actorUserId,
+      action: "clients.delete",
+      entityType: "client",
+      entityId: id,
+      metadata: { name: existing.name },
+    });
   }
 }

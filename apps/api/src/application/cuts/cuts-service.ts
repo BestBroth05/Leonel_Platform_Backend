@@ -194,6 +194,45 @@ export class CutsService {
     return this.toDto(updated);
   }
 
+  async softDelete(id: string, actorUserId: string): Promise<void> {
+    const existing = await this.db.query.cuts.findFirst({
+      where: and(eq(cuts.id, id), isNull(cuts.deletedAt)),
+    });
+    if (!existing) throw new NotFoundError("Corte no encontrado");
+
+    const assignedOrders = await this.db
+      .select({ orderId: orderCuts.orderId })
+      .from(orderCuts)
+      .innerJoin(orders, eq(orderCuts.orderId, orders.id))
+      .where(
+        and(
+          eq(orderCuts.cutId, id),
+          isNull(orders.deletedAt),
+          ne(orders.status, "CANCELLED"),
+        ),
+      )
+      .limit(1);
+    if (assignedOrders.length > 0) {
+      throw new ConflictError(
+        "No se puede eliminar: el corte está asignado a pedidos activos. Elimina o cancela esos pedidos primero.",
+      );
+    }
+
+    const now = new Date();
+    await this.db
+      .update(cuts)
+      .set({ deletedAt: now, updatedAt: now, updatedBy: actorUserId })
+      .where(eq(cuts.id, id));
+
+    await writeAudit(this.db, {
+      actorUserId,
+      action: "cuts.delete",
+      entityType: "cut",
+      entityId: id,
+      metadata: { number: existing.number },
+    });
+  }
+
   async listReceipts(cutId: string): Promise<CutReceiptDto[]> {
     await this.getById(cutId);
     const rows = await this.db

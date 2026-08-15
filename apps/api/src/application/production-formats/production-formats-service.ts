@@ -200,6 +200,39 @@ export class ProductionFormatsService {
     return this.getById(id);
   }
 
+  async softDelete(id: string, actorUserId: string): Promise<void> {
+    const existing = await this.db.query.productionFormats.findFirst({
+      where: and(eq(productionFormats.id, id), isNull(productionFormats.deletedAt)),
+    });
+    if (!existing) throw new NotFoundError("Formato de producción no encontrado");
+
+    const now = new Date();
+    await this.db.transaction(async (tx) => {
+      await tx
+        .update(orders)
+        .set({ deletedAt: now, updatedAt: now, updatedBy: actorUserId })
+        .where(
+          and(eq(orders.productionFormatId, id), isNull(orders.deletedAt)),
+        );
+      await tx
+        .update(cuts)
+        .set({ deletedAt: now, updatedAt: now, updatedBy: actorUserId })
+        .where(and(eq(cuts.productionFormatId, id), isNull(cuts.deletedAt)));
+      await tx
+        .update(productionFormats)
+        .set({ deletedAt: now, updatedAt: now, updatedBy: actorUserId })
+        .where(eq(productionFormats.id, id));
+
+      await writeAudit(tx, {
+        actorUserId,
+        action: "production_formats.delete",
+        entityType: "production_format",
+        entityId: id,
+        metadata: { number: existing.number },
+      });
+    });
+  }
+
   private toDto(r: {
     id: string;
     number: string;
