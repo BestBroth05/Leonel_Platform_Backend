@@ -15,6 +15,21 @@ import type { AppConfig } from "../shared/config.js";
 import { AppError, UnauthorizedError } from "../shared/errors.js";
 import { registerDomainRoutes } from "./register-routes.js";
 
+function isAppErrorLike(error: unknown): error is AppError {
+  if (!error || typeof error !== "object") return false;
+  const e = error as {
+    code?: unknown;
+    message?: unknown;
+    statusCode?: unknown;
+    details?: unknown;
+  };
+  return (
+    typeof e.code === "string" &&
+    typeof e.message === "string" &&
+    typeof e.statusCode === "number"
+  );
+}
+
 export type AppDeps = {
   config: AppConfig;
   authService: AuthService;
@@ -42,12 +57,19 @@ export async function createApp(deps: AppDeps) {
   });
 
   app.setErrorHandler((error, _request, reply) => {
-    if (error instanceof AppError) {
-      return reply.status(error.statusCode).send({
+    const appError =
+      error instanceof AppError
+        ? error
+        : isAppErrorLike(error)
+          ? error
+          : null;
+
+    if (appError) {
+      return reply.status(appError.statusCode).send({
         error: {
-          code: error.code,
-          message: error.message,
-          ...(error.details !== undefined ? { details: error.details } : {}),
+          code: appError.code,
+          message: appError.message,
+          ...(appError.details !== undefined ? { details: appError.details } : {}),
         },
       });
     }
@@ -60,8 +82,18 @@ export async function createApp(deps: AppDeps) {
       });
     }
     app.log.error(error);
+    const message =
+      error instanceof Error && error.message
+        ? error.message
+        : "Error interno";
     return reply.status(500).send({
-      error: { code: "INTERNAL_ERROR", message: "Error interno" },
+      error: {
+        code: "INTERNAL_ERROR",
+        message:
+          deps.config.LEONEL_PLATFORM_ENV === "production"
+            ? "Error interno"
+            : message,
+      },
     });
   });
 
