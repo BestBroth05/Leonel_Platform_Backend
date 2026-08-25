@@ -26,5 +26,5 @@ COPY --from=build /app/apps/api ./apps/api
 COPY package.json pnpm-workspace.yaml ./
 WORKDIR /app/apps/api
 EXPOSE 3000
-# Migrate on boot. Seed only when SEED_ON_BOOT=true (local/demo); never force seed in prod.
+# Migrate on boot. Optional idempotent bootstrap when SEED_ON_BOOT=true (safe in production).
 CMD ["sh", "-c", "pnpm db:migrate && if [ \"$SEED_ON_BOOT\" = \"true\" ]; then pnpm db:seed; fi && node dist/main.js"]

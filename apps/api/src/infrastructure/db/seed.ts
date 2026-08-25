@@ -15,8 +15,14 @@ import {
 
 async function main() {
   const env = process.env.LEONEL_PLATFORM_ENV ?? process.env.NODE_ENV ?? "local";
-  if (env === "production" || env === "prod") {
-    console.error("[seed] Refusing to run seeds in production.");
+  const isProduction = env === "production" || env === "prod";
+  const seedOnBoot = process.env.SEED_ON_BOOT === "true";
+
+  // Production: only allow bootstrap when SEED_ON_BOOT=true (idempotent admin/roles).
+  if (isProduction && !seedOnBoot) {
+    console.error(
+      "[seed] Refusing to run in production without SEED_ON_BOOT=true.",
+    );
     process.exit(1);
   }
 
@@ -114,9 +120,8 @@ async function main() {
     where: eq(users.email, adminEmail),
   });
 
-  const passwordHash = await argon2.hash(adminPassword);
-
   if (!existingAdmin) {
+    const passwordHash = await argon2.hash(adminPassword);
     const [created] = await db
       .insert(users)
       .values({
@@ -137,34 +142,44 @@ async function main() {
     });
     console.log(`[seed] Admin user created: ${adminEmail}`);
   } else {
-    // Local/CI: keep seed password in sync so env changes apply on restart
-    await db
-      .update(users)
-      .set({ passwordHash, updatedAt: new Date() })
-      .where(eq(users.id, existingAdmin.id));
-    console.log(`[seed] Admin password refreshed: ${adminEmail}`);
+    // Idempotent: never recreate. Local/CI may refresh password; production leaves it alone.
+    if (!isProduction) {
+      const passwordHash = await argon2.hash(adminPassword);
+      await db
+        .update(users)
+        .set({ passwordHash, updatedAt: new Date() })
+        .where(eq(users.id, existingAdmin.id));
+      console.log(`[seed] Admin password refreshed: ${adminEmail}`);
+    } else {
+      console.log(`[seed] Admin already exists (skipped): ${adminEmail}`);
+    }
   }
 
-  for (const name of ["Denim", "Premium", "Genérica"]) {
-    const existing = await db.query.brands.findFirst({ where: eq(brands.name, name) });
-    if (!existing) await db.insert(brands).values({ name });
-  }
-  for (const name of ["Mezclilla", "Gabardina"]) {
-    const existing = await db.query.pantTypes.findFirst({
-      where: eq(pantTypes.name, name),
-    });
-    if (!existing) await db.insert(pantTypes).values({ name });
-  }
-  for (const name of ["CD Norte", "Tienda Centro"]) {
-    const existing = await db.query.destinations.findFirst({
-      where: eq(destinations.name, name),
-    });
-    if (!existing) await db.insert(destinations).values({ name });
-  }
-  console.log("[seed] Catalog samples ensured");
+  // Sample catalogs + demo data only outside production.
+  if (!isProduction) {
+    for (const name of ["Denim", "Premium", "Genérica"]) {
+      const existing = await db.query.brands.findFirst({ where: eq(brands.name, name) });
+      if (!existing) await db.insert(brands).values({ name });
+    }
+    for (const name of ["Mezclilla", "Gabardina"]) {
+      const existing = await db.query.pantTypes.findFirst({
+        where: eq(pantTypes.name, name),
+      });
+      if (!existing) await db.insert(pantTypes).values({ name });
+    }
+    for (const name of ["CD Norte", "Tienda Centro"]) {
+      const existing = await db.query.destinations.findFirst({
+        where: eq(destinations.name, name),
+      });
+      if (!existing) await db.insert(destinations).values({ name });
+    }
+    console.log("[seed] Catalog samples ensured");
 
-  const { runDemoSeed } = await import("./seed-demo.js");
-  await runDemoSeed(db);
+    const { runDemoSeed } = await import("./seed-demo.js");
+    await runDemoSeed(db);
+  } else {
+    console.log("[seed] Production bootstrap complete (no demo data).");
+  }
 
   await closeDb();
 }

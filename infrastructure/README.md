@@ -1,4 +1,7 @@
-# Deploy — Render (backend)
+# Deploy — Render (backend) — legacy until AWS cutover
+
+> Prefer AWS EC2 docs: [`infrastructure/aws/README.md`](aws/README.md).  
+> Keep Render live until AWS smoke tests and frontend cutover succeed.
 
 ## Qué elegir en Render
 
